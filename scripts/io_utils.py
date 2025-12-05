@@ -14,6 +14,44 @@ import pandas as pd
 
 EXAMPLE_FILENAME = "ejemplo_quimiometria.xls"
 
+# scripts/io_utils.py (o donde tú quieras)
+
+import plotly.express as px
+
+# Paletas discretas sugeridas por nombre
+DISCRETE_PALETTES = {
+    "deep": px.colors.qualitative.Plotly,
+    "muted": px.colors.qualitative.Safe,
+    "pastel": px.colors.qualitative.Pastel,
+    "bright": px.colors.qualitative.Bold,
+    "dark": px.colors.qualitative.Dark2,
+    "colorblind": px.colors.qualitative.Safe,
+    "viridis": px.colors.qualitative.Vivid,  # para series discretas
+}
+
+# Paletas continuas
+CONTINUOUS_PALETTES = {
+    "deep": px.colors.sequential.Blues,
+    "muted": px.colors.sequential.GnBu,
+    "pastel": px.colors.sequential.Sunset,
+    "bright": px.colors.sequential.YlOrRd,
+    "dark": px.colors.sequential.Magma,
+    "colorblind": px.colors.sequential.Cividis,
+    "viridis": px.colors.sequential.Viridis,
+}
+
+def get_discrete_palette(name: str | None) -> list[str] | None:
+    """Devolver secuencia de colores discretos según el nombre guardado."""
+    if not name:
+        return None
+    return DISCRETE_PALETTES.get(name)
+
+def get_continuous_palette(name: str | None) -> list[str] | None:
+    """Devolver escala continua según el nombre guardado."""
+    if not name:
+        return None
+    return CONTINUOUS_PALETTES.get(name)
+
 
 def load_example_dataset(base_path: Optional[Path] = None) -> pd.DataFrame:
     """Load the bundled chemometrics example dataset.

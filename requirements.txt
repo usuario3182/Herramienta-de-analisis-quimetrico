@@ -26,3 +26,6 @@ typing-extensions>=4.8
 
 # --- Optional but recommended ---
 scikit-learn-intelex  # Si quisieras acelerar PCA/KMeans (opcional)
+
+# --- Visualizaciones
+kaleido==0.2.1

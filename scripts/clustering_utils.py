@@ -3,51 +3,24 @@ clustering_utils.py
 
 Funciones auxiliares para aplicar algoritmos de clustering dentro de la
 aplicación de análisis quimiométrico.
-
-RESPONSABILIDAD DEL MÓDULO
---------------------------
-- Preparar la matriz de datos a partir de un DataFrame (selección de columnas).
-- Ejecutar algoritmos de clustering (K-Means y jerárquico/agglomerative).
-- Calcular métricas simples de calidad de clúster (por ejemplo, silhouette).
-- Devolver:
-    * El modelo entrenado.
-    * Las etiquetas de clúster (labels) como array/Series.
-    * Información adicional útil (centroides, linkage, métricas).
-
-SE USA PRINCIPALMENTE EN:
--------------------------
-- app/pages/4_Clustering.py
-
-CONVENCIONES:
--------------
-- Entrada principal: DataFrame limpio (clean_df) o scores de PCA
-  (pca_scores), según defina la página 4.
-- Por simplicidad, trabajaremos solo con columnas numéricas.
-- Los nombres de las funciones deben ser estables para que la página 4
-  pueda importarlas sin romperse.
-
-IMPORTANTE PARA CODEX:
-----------------------
-- NO agregar código de Streamlit aquí.
-- Mantener mensajes de error en español (para mostrarlos tal cual en la UI).
-- SOLO completar las funciones marcadas con TODO. El resto del archivo
-  no debe modificarse salvo que sea estrictamente necesario para compilar.
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Literal
 
 import numpy as np
 import pandas as pd
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.metrics import silhouette_score
 
- 
-# === TODO: implementar funciones auxiliares de clustering debajo de esta línea ===
+
+# -------------------------------------------------------------------
+# Helpers internos (no exportados) para evitar duplicar lógica
+# -------------------------------------------------------------------
 
 
-def select_numeric_features(
+def _select_numeric_features(
     df: pd.DataFrame,
     columns: List[str] | None = None,
 ) -> pd.DataFrame:
@@ -58,10 +31,67 @@ def select_numeric_features(
     - Si columns se proporciona, se valida que existan y se filtran solo las
       columnas numéricas.
     - Si no queda ninguna columna numérica, se lanza ValueError.
-
-    TODO: implementar cuerpo de la función.
     """
-    raise NotImplementedError
+    if columns:
+        missing = [col for col in columns if col not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Las siguientes columnas no existen en el DataFrame: {', '.join(missing)}"
+            )
+        numeric_df = df[columns].select_dtypes(include=[np.number])
+        if numeric_df.empty:
+            raise ValueError(
+                "No hay columnas numéricas para clustering dentro de la selección."
+            )
+        return numeric_df
+
+    numeric_df = df.select_dtypes(include=[np.number])
+    if numeric_df.empty:
+        raise ValueError("No hay columnas numéricas para clustering.")
+    return numeric_df
+
+
+def _validate_n_clusters(n_clusters: int, n_samples: int) -> None:
+    """Validar rango de número de clústeres."""
+    if n_samples < 2:
+        raise ValueError("Se requieren al menos 2 muestras para aplicar clustering.")
+    if n_clusters < 2 or n_clusters > n_samples:
+        raise ValueError(
+            "El número de clústeres debe estar entre 2 y el número de muestras."
+        )
+
+
+def _compute_silhouette_safe(X: pd.DataFrame, labels: np.ndarray) -> float | None:
+    """
+    Calcular silhouette de forma segura.
+
+    Devuelve:
+    - float si el cálculo es posible.
+    - None si no es posible (por ejemplo, solo un clúster o una sola muestra).
+    """
+    # silhouette_score requiere al menos 2 muestras y al menos 2 clústeres distintos
+    if len(X) < 2:
+        return None
+    if len(set(labels)) < 2:
+        return None
+    return float(silhouette_score(X, labels))
+
+
+# -------------------------------------------------------------------
+# API pública usada por la página de clustering
+# -------------------------------------------------------------------
+
+
+def select_numeric_features(
+    df: pd.DataFrame,
+    columns: List[str] | None = None,
+) -> pd.DataFrame:
+    """
+    Versión pública del selector de columnas numéricas.
+
+    Se expone por si la página de clustering necesita reutilizar esta lógica.
+    """
+    return _select_numeric_features(df, columns)
 
 
 def run_kmeans(
@@ -69,47 +99,75 @@ def run_kmeans(
     n_clusters: int,
     columns: List[str] | None = None,
     random_state: int = 0,
-) -> Tuple[KMeans, np.ndarray, Dict[str, float]]:
+) -> Tuple[KMeans, np.ndarray, Dict[str, float | None]]:
     """
     Ejecutar K-Means sobre las columnas seleccionadas.
 
     Devuelve:
     - modelo KMeans entrenado.
     - labels: arreglo de etiquetas de clúster (shape = [n_muestras]).
-    - metrics: diccionario con métricas (por ejemplo:
+    - metrics: diccionario con métricas, por ejemplo:
           {
               "silhouette": ...,
               "inertia": ...
           }
-      )
-
-    TODO: implementar cuerpo de la función.
     """
-    raise NotImplementedError
+    X = _select_numeric_features(df, columns)
+
+    _validate_n_clusters(n_clusters, len(X))
+
+    model = KMeans(n_clusters=n_clusters, random_state=random_state)
+    model.fit(X)
+
+    labels: np.ndarray = model.labels_
+    inertia: float = float(model.inertia_)
+    silhouette = _compute_silhouette_safe(X, labels)
+
+    metrics: Dict[str, float | None] = {
+        "silhouette": silhouette,
+        "inertia": inertia,
+    }
+    return model, labels, metrics
 
 
 def run_hierarchical(
     df: pd.DataFrame,
     n_clusters: int,
     columns: List[str] | None = None,
-    linkage: str = "ward",
+    linkage: Literal["ward", "complete", "average", "single"] = "ward",
     affinity: str = "euclidean",
-) -> Tuple[AgglomerativeClustering, np.ndarray, Dict[str, float]]:
+) -> Tuple[AgglomerativeClustering, np.ndarray, Dict[str, float | None]]:
     """
     Ejecutar clustering jerárquico/agglomerative.
 
     Devuelve:
     - modelo AgglomerativeClustering entrenado.
     - labels: arreglo de etiquetas de clúster (shape = [n_muestras]).
-    - metrics: diccionario con métricas (por ejemplo:
+    - metrics: diccionario con métricas, por ejemplo:
           {
               "silhouette": ...
           }
-      )
 
-    NOTA: Para linkage="ward" sklearn ignora "affinity" y usa euclidean.
-
-    TODO: implementar cuerpo de la función.
+    NOTA: Para linkage="ward" sklearn ignora "affinity" y usa distancia euclidiana.
     """
-    raise NotImplementedError
+    X = _select_numeric_features(df, columns)
 
+    _validate_n_clusters(n_clusters, len(X))
+
+    # En versiones recientes de sklearn, el parámetro se llama `metric`.
+    effective_metric = "euclidean" if linkage == "ward" else affinity
+
+    model = AgglomerativeClustering(
+        n_clusters=n_clusters,
+        linkage=linkage,
+        metric=effective_metric,
+    )
+    model.fit(X)
+
+    labels: np.ndarray = model.labels_
+    silhouette = _compute_silhouette_safe(X, labels)
+
+    metrics: Dict[str, float | None] = {
+        "silhouette": silhouette,
+    }
+    return model, labels, metrics

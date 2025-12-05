@@ -6,8 +6,7 @@ from typing import Dict, Iterable, Tuple
 
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype, is_numeric_dtype
-from sklearn.preprocessing import StandardScaler
-
+from sklearn.preprocessing import StandardScaler, MinMaxScaler  # 👈 OJO: MinMaxScaler añadido
 
 Schema = Dict[str, str]
 ImputationConfig = Dict[str, Dict[str, object]]
@@ -16,7 +15,6 @@ ScalingConfig = Dict[str, bool]
 
 def infer_variable_types(df: pd.DataFrame) -> Schema:
     """Inferir tipos de variables basados en el dtype de pandas."""
-
     inferred: Schema = {}
     for column in df.columns:
         series = df[column]
@@ -31,7 +29,6 @@ def infer_variable_types(df: pd.DataFrame) -> Schema:
 
 def convert_dtypes(df: pd.DataFrame, schema: Schema) -> pd.DataFrame:
     """Convertir columnas según el esquema proporcionado."""
-
     converted = df.copy()
     for column, col_type in schema.items():
         if column not in converted.columns:
@@ -45,7 +42,7 @@ def convert_dtypes(df: pd.DataFrame, schema: Schema) -> pd.DataFrame:
                 converted[column] = converted[column].astype("category")
             else:
                 raise ValueError(f"Tipo no soportado para la columna '{column}': {col_type}")
-        except Exception as exc:  # pragma: no cover - feedback específico
+        except Exception as exc:
             raise ValueError(
                 f"Error al convertir la columna '{column}' al tipo {col_type}: {exc}"
             ) from exc
@@ -54,7 +51,6 @@ def convert_dtypes(df: pd.DataFrame, schema: Schema) -> pd.DataFrame:
 
 def compute_missing_summary(df: pd.DataFrame) -> pd.DataFrame:
     """Calcular el resumen de valores faltantes por columna."""
-
     total_rows = len(df)
     summary_rows: Iterable[Tuple[str, int, float]] = (
         (col, int(df[col].isna().sum()), float(df[col].isna().mean()) * 100)
@@ -67,14 +63,16 @@ def compute_missing_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def apply_imputation(
-    df: pd.DataFrame, imputation_config: ImputationConfig, schema: Schema
+    df: pd.DataFrame,
+    imputation_config: ImputationConfig,
+    schema: Schema,
 ) -> pd.DataFrame:
     """Aplicar imputación según configuración por columna."""
-
     imputed = df.copy()
     for column, config in imputation_config.items():
         if column not in imputed.columns:
             raise ValueError(f"La columna '{column}' no existe en los datos.")
+
         strategy = config.get("strategy", "none") if config else "none"
         fill_value = config.get("fill_value") if config else None
 
@@ -84,7 +82,6 @@ def apply_imputation(
             imputed = imputed[imputed[column].notna()]
             continue
 
-        col_type = schema.get(column)
         series = imputed[column]
 
         if strategy in {"mean", "median"}:
@@ -106,7 +103,7 @@ def apply_imputation(
                 raise ValueError(
                     f"Debe proporcionar un valor constante para imputar la columna '{column}'."
                 )
-            imputed[column] = series.fillna(fill_value)
+            imputed[column] = series.fillna(value=fill_value)  # type: ignore
         else:
             raise ValueError(
                 f"Estrategia de imputación no reconocida para la columna '{column}': {strategy}"
@@ -114,17 +111,33 @@ def apply_imputation(
     return imputed
 
 
-def apply_scaling(df: pd.DataFrame, scaling_config: ScalingConfig, schema: Schema) -> pd.DataFrame:
-    """Estandarizar columnas numéricas según la configuración."""
+def apply_scaling(
+    df: pd.DataFrame,
+    scaling_config: ScalingConfig,
+    schema: Schema,
+    mode: str = "standard",
+) -> pd.DataFrame:
+    """Estandarizar columnas numéricas según la configuración.
 
+    mode:
+        - "none"     -> no escala nada
+        - "standard" -> StandardScaler (media 0, varianza 1)
+        - "minmax"   -> MinMaxScaler [0, 1]
+    """
     scaled = df.copy()
     numeric_to_scale = [
         col for col, flag in scaling_config.items() if flag and schema.get(col) == "numeric"
     ]
-    if not numeric_to_scale:
+    if not numeric_to_scale or mode == "none":
         return scaled
 
-    scaler = StandardScaler()
+    if mode == "standard":
+        scaler = StandardScaler()
+    elif mode == "minmax":
+        scaler = MinMaxScaler()
+    else:
+        return scaled
+
     scaled_values = scaler.fit_transform(scaled[numeric_to_scale])
     scaled[numeric_to_scale] = scaled_values
     return scaled
@@ -135,6 +148,7 @@ def preprocess_data(
     schema: Schema | None = None,
     imputation_config: ImputationConfig | None = None,
     scaling_config: ScalingConfig | None = None,
+    scaling_mode: str = "standard",
 ) -> pd.DataFrame:
     """Ejecutar el pipeline completo de preprocesamiento."""
 
@@ -151,5 +165,5 @@ def preprocess_data(
 
     converted = convert_dtypes(df, schema)
     imputed = apply_imputation(converted, imputation_config, schema)
-    scaled = apply_scaling(imputed, scaling_config, schema)
+    scaled = apply_scaling(imputed, scaling_config, schema, mode=scaling_mode)
     return scaled

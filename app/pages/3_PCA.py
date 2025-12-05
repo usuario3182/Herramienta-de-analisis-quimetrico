@@ -7,9 +7,12 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import pandas as pd
 
 from scripts.pca_utils import run_pca
-
+# plaeta de colores
+from scripts.io_utils import get_discrete_palette
+import plotly.graph_objects as go
 
 def render_header() -> None:
     """Encabezado explicativo de la página."""
@@ -96,13 +99,25 @@ def render_explained_variance_section() -> None:
 
     st.subheader("Varianza explicada")
     st.dataframe(explained_df, use_container_width=True)
-
+    
+    qualitative_palettes = {
+        "Plotly": px.colors.qualitative.Plotly,
+        "D3": px.colors.qualitative.D3,
+        "Pastel": px.colors.qualitative.Pastel,
+        "Dark24": px.colors.qualitative.Dark24,
+        "Set2": px.colors.qualitative.Set2,
+    }
+    palette_name = st.session_state.get("plot_color_palette", "deep")
+    
+    
+    discrete_seq = qualitative_palettes.get(palette_name, px.colors.qualitative.Plotly)
     fig = px.line(
         explained_df,
         x="Componente",
         y="Proporción_varianza",
         markers=True,
         title="Gráfico de sedimentación (Scree plot)",
+        color_discrete_sequence= discrete_seq
     )
     fig.update_layout(xaxis_title="Componente", yaxis_title="Proporción de varianza")
     st.plotly_chart(fig, use_container_width=True)
@@ -116,45 +131,104 @@ def _get_available_pcs() -> List[str]:
 
 
 def render_scores_plots() -> None:
-    """Permite explorar los scores del PCA en 2D."""
-
-    scores_df = st.session_state.get("pca_scores")
-    clean_df = st.session_state.get("clean_df")
-    if scores_df is None:
-        st.info("Calcule el PCA para visualizar los scores.")
+    """
+    Mostrar gráficos de scores (PCx vs PCy) con opción de colorear por variable.
+    Usa la paleta global almacenada en st.session_state["plot_color_palette"].
+    """
+    
+    palette_name = st.session_state.get("plot_color_palette", "deep")
+    discrete_colors = get_discrete_palette(palette_name)
+    
+    scores_df: pd.DataFrame | None = st.session_state.get("pca_scores")
+    if scores_df is None or scores_df.empty:
+        st.info("Aún no se han calculado scores de PCA.")
         return
 
-    pcs = _get_available_pcs()
-    if len(pcs) < 2:
-        st.warning("Se necesitan al menos dos componentes para el gráfico de scores.")
+    pc_cols = [c for c in scores_df.columns if c.startswith("PC")]
+    if len(pc_cols) < 2:
+        st.warning("Se requieren al menos dos componentes principales para este gráfico.")
         return
 
-    col1, col2 = st.columns(2)
-    pc_x = col1.selectbox("Componente en eje X", pcs, index=0)
-    pc_y = col2.selectbox("Componente en eje Y", pcs, index=1 if len(pcs) > 1 else 0)
+    st.subheader("Gráfico de scores de PCA")
 
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        x_pc = st.selectbox(
+            "Componente eje X",
+            pc_cols,
+            index=0,
+            key="scores_x_pc",
+        )
+
+    with col2:
+        y_default = 1 if len(pc_cols) > 1 else 0
+        y_pc = st.selectbox(
+            "Componente eje Y",
+            pc_cols,
+            index=y_default,
+            key="scores_y_pc",
+        )
+
+    # --- Opciones de color ---
+    clean_df: pd.DataFrame | None = st.session_state.get("clean_df")
     color_options = ["Sin color"]
-    if clean_df is not None:
-        categorical_cols = list(clean_df.select_dtypes(exclude="number").columns)
-        color_options.extend(categorical_cols)
+    valid_color_cols: list[str] = []
 
-    color_by = st.selectbox("Color por variable", options=color_options)
-    color_arg = None if color_by == "Sin color" else color_by
+    if clean_df is not None:
+        # Solo columnas con el mismo número de filas que scores_df
+        for col in clean_df.columns:
+            if len(clean_df[col]) == len(scores_df):
+                valid_color_cols.append(col)
+        color_options += valid_color_cols
+
+    with col3:
+        color_choice = st.selectbox(
+            "Color por variable",
+            color_options,
+            key="scores_color_by",
+        )
+
+    # Construimos el data_frame final que usará Plotly
+    plot_df = scores_df.copy()
+    color_arg: str | None = None
+
+    if color_choice != "Sin color" and color_choice in valid_color_cols and clean_df is not None:
+        # Creamos una columna interna para el color
+        color_arg = "color_var"
+        plot_df[color_arg] = clean_df[color_choice].values
+
+    # --- Paleta global para Plotly ---
+    palette_name = st.session_state.get("plot_color_palette", "Plotly")
+
+    qualitative_palettes = {
+        "Plotly": px.colors.qualitative.Plotly,
+        "D3": px.colors.qualitative.D3,
+        "Pastel": px.colors.qualitative.Pastel,
+        "Dark24": px.colors.qualitative.Dark24,
+        "Set2": px.colors.qualitative.Set2,
+    }
+    discrete_seq = qualitative_palettes.get(palette_name, px.colors.qualitative.Plotly)
 
     fig = px.scatter(
-        scores_df,
-        x=pc_x,
-        y=pc_y,
+        plot_df,
+        x=x_pc,
+        y=y_pc,
         color=color_arg,
-        title="Scores PCA",
-        labels={pc_x: pc_x, pc_y: pc_y},
+        title=f"Scores de PCA: {x_pc} vs {y_pc}",
+        color_discrete_sequence=discrete_seq,
     )
+    fig.update_layout(template="plotly_dark", height=500)
+
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_biplot() -> None:
     """Genera un biplot sencillo con scores y loadings."""
 
+    palette_name = st.session_state.get("plot_color_palette", "deep")
+    discrete_colors = get_discrete_palette(palette_name)
+    
     scores_df = st.session_state.get("pca_scores")
     loadings_df = st.session_state.get("pca_loadings")
     if scores_df is None or loadings_df is None:
@@ -167,16 +241,29 @@ def render_biplot() -> None:
         return
 
     col1, col2 = st.columns(2)
+    discrete_colors = get_discrete_palette(palette_name)
+
     pc_x = col1.selectbox("Componente X (biplot)", pcs, index=0)
     pc_y = col2.selectbox("Componente Y (biplot)", pcs, index=1 if len(pcs) > 1 else 0)
 
-    fig = px.scatter(scores_df, x=pc_x, y=pc_y, title="Biplot PCA")
+    # Scatter de scores usa la paleta completa
+    fig = px.scatter(
+        scores_df,
+        x=pc_x,
+        y=pc_y,
+        title="Biplot PCA",
+        color_discrete_sequence=discrete_colors,
+    )
 
-    # Escalar vectores de loadings para visualización
+    # Color para vectores
+    vector_color = discrete_colors[0] if discrete_colors else "red"
+
+    # Escalado de vectores
     loadings_subset = loadings_df[[pc_x, pc_y]]
     max_score = max(scores_df[pc_x].abs().max(), scores_df[pc_y].abs().max())
     scale = max_score * 0.8 if max_score > 0 else 1
 
+    # Añadir vectores
     for var_name, (loading_x, loading_y) in loadings_subset.iterrows():
         fig.add_trace(
             go.Scatter(
@@ -185,10 +272,12 @@ def render_biplot() -> None:
                 mode="lines+text",
                 text=["", var_name],
                 textposition="top center",
-                line=dict(color="red"),
+                line=dict(color=vector_color, width=2),
                 showlegend=False,
             )
         )
+
+    st.plotly_chart(fig, use_container_width=True)
 
     fig.update_layout(xaxis_title=pc_x, yaxis_title=pc_y)
     st.plotly_chart(fig, use_container_width=True)

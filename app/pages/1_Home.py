@@ -12,6 +12,10 @@ import streamlit as st
 import os
 import sys
 
+import numpy as np
+import pandas as pd
+import plotly.express as px
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
@@ -21,6 +25,71 @@ from scripts.io_utils import (
     load_example_dataset,
     load_uploaded_dataset,
 )
+
+def render_palette_preview() -> None:
+    """Vista previa de la paleta de colores para las gráficas de la app."""
+
+    st.subheader("Paleta de colores para las gráficas")
+
+    palette_options = ["Plotly", "D3", "Pastel", "Dark24", "Set2"]
+    current = st.session_state.get("plot_color_palette", "Plotly")
+
+    palette_choice = st.selectbox(
+        "Seleccione una paleta de colores",
+        palette_options,
+        index=palette_options.index(current) if current in palette_options else 0,
+    )
+
+    # Datos sintéticos para mostrar la paleta
+    np.random.seed(0)
+    n = 150
+    df_preview = pd.DataFrame(
+        {
+            "x": np.concatenate(
+                [
+                    np.random.normal(0, 1, n),
+                    np.random.normal(3, 1, n),
+                    np.random.normal(-3, 1, n),
+                ]
+            ),
+            "y": np.concatenate(
+                [
+                    np.random.normal(0, 1, n),
+                    np.random.normal(3, 1, n),
+                    np.random.normal(-3, 1, n),
+                ]
+            ),
+            "grupo": np.repeat(["Grupo A", "Grupo B", "Grupo C"], n),
+        }
+    )
+
+    qualitative_palettes = {
+        "Plotly": px.colors.qualitative.Plotly,
+        "D3": px.colors.qualitative.D3,
+        "Pastel": px.colors.qualitative.Pastel,
+        "Dark24": px.colors.qualitative.Dark24,
+        "Set2": px.colors.qualitative.Set2,
+    }
+    discrete_seq = qualitative_palettes.get(palette_choice, px.colors.qualitative.Plotly)
+
+    fig = px.scatter(
+        df_preview,
+        x="x",
+        y="y",
+        color="grupo",
+        title="Vista previa de la paleta de colores",
+        color_discrete_sequence=discrete_seq,
+    )
+    fig.update_layout(template="plotly_dark", height=400)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    if st.button("Aplicar esta paleta a toda la app"):
+        st.session_state["plot_color_palette"] = palette_choice
+        st.success(
+            "Paleta aplicada. Las gráficas de PCA y clustering utilizarán esta paleta."
+        )
+
 
 
 def _reset_analysis_state(preserved_keys: List[str] | None = None) -> None:
@@ -59,7 +128,7 @@ def init_session_state() -> None:
 def render_header() -> None:
     """Mostrar título y descripción general de la aplicación."""
 
-    st.set_page_config(page_title="Inicio - Análisis Quimiométrico", page_icon="🧪")
+    st.set_page_config(page_title="Inicio - Análisis Quimiométrico")
     st.title("Análisis Quimiométrico: Aplicación Interactiva")
     st.markdown(
         """
@@ -145,9 +214,9 @@ def render_navigation() -> None:
     )
     navigation_cols = st.columns(2)
     with navigation_cols[0]:
-        st.page_link("pages/2_Preprocesamiento.py", label="Ir a Preprocesamiento", icon="⚙️")
+        st.page_link("pages/2_Preprocesamiento.py", label="Ir a Preprocesamiento")
     with navigation_cols[1]:
-        st.page_link("pages/0_Ayuda_Interpretacion.py", label="Ver ayuda e interpretación", icon="📖")
+        st.page_link("pages/0_Ayuda_Interpretacion.py", label="Ver ayuda e interpretación")
 
 
 def main() -> None:
@@ -155,6 +224,7 @@ def main() -> None:
     render_header()
     render_dataset_selector()
     render_dataset_preview()
+    render_palette_preview() 
     render_navigation()
 
 
