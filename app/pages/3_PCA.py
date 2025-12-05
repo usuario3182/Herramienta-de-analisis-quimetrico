@@ -42,9 +42,9 @@ def render_pca_config_panel(df):
         default=default_columns,
     )
 
-    max_components = min(len(selected_columns) if selected_columns else n_vars, 10)
+    max_components = min(len(selected_columns) if selected_columns else len(numeric_columns), 10)
     if max_components < 1:
-        max_components = min(n_vars, 10)
+        max_components = min(len(numeric_columns), 10)
 
     current_n = st.session_state.get("pca_config", {}).get("n_components", max_components)
     n_components = st.number_input(
