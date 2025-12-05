@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import List
 
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -13,13 +14,13 @@ from scripts.pca_utils import run_pca
 def render_header() -> None:
     """Encabezado explicativo de la página."""
 
-    st.set_page_config(page_title="PCA", page_icon="📊")
-    st.title("📊 Análisis de Componentes Principales")
+    st.title("Análisis de Componentes Principales")
     st.markdown(
         """
-        El PCA reduce la dimensionalidad de los datos y resume la variabilidad en
-        componentes principales. Aquí puede elegir las variables numéricas,
-        calcular el modelo y explorar varianza explicada, scores y cargas.
+        El PCA reduce la dimensionalidad agrupando la variabilidad en un número
+        menor de componentes. En esta página puede elegir qué variables numéricas
+        incluir, definir cuántos componentes calcular y revisar tablas y gráficos
+        de varianza explicada, scores y biplots.
         """
     )
 
@@ -27,13 +28,13 @@ def render_header() -> None:
 def render_pca_config_panel(df):
     """Panel lateral o sección para configurar variables y componentes."""
 
-    numeric_columns = list(df.select_dtypes(include="number").columns)
+    numeric_columns = list(df.select_dtypes(include=[np.number]).columns)
     if not numeric_columns:
         st.error("No hay columnas numéricas disponibles para PCA.")
         return
 
-    default_columns = st.session_state.get("pca_config", {}).get("columns", numeric_columns)
-    n_vars = len(numeric_columns)
+    previous_config = st.session_state.get("pca_config", {})
+    default_columns = previous_config.get("columns", numeric_columns)
 
     selected_columns = st.multiselect(
         "Variables numéricas para PCA",
@@ -67,6 +68,9 @@ def render_run_pca_button(df) -> None:
         config = st.session_state.get("pca_config", {})
         columns = config.get("columns")
         n_components = config.get("n_components")
+        if not columns:
+            st.error("Seleccione al menos una variable numérica para el PCA.")
+            return
         try:
             model, scores_df, loadings_df, explained_df = run_pca(
                 df, n_components=n_components, columns=columns
@@ -87,7 +91,7 @@ def render_explained_variance_section() -> None:
 
     explained_df = st.session_state.get("pca_explained_variance")
     if explained_df is None:
-        st.info("Calcule el PCA para ver la varianza explicada.")
+        st.info("Aún no se ha calculado el PCA.")
         return
 
     st.subheader("Varianza explicada")
