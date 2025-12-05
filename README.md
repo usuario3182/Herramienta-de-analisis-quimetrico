@@ -2,19 +2,27 @@
 
 # Instrucciones para replicar:
 ## Clonar el repositorio
-git clone https://github.com/usuario/Herramienta-de-analisis-quimetrico.git
-cd Herramienta-de-analisis-quimetrico
+`git clone https://github.com/usuario/Herramienta-de-analisis-quimetrico.git`
+
+`cd Herramienta-de-analisis-quimetrico`
 
 ## Crear entorno virtual
-python -m venv .venv
-source .venv/bin/activate   # Linux/Mac
-.\.venv\Scripts\activate    # Windows
+
+`python -m venv .venv`
+
+Linux/Mac
+
+`source .venv/bin/activate`   
+
+Windows
+
+`.\.venv\Scripts\activate`    
 
 ## Instalar dependencias: 
-pip install -r requirements.txt
+`pip install -r requirements.txt`
 
 ## Ejecutar la aplicación: 
-streamlit run app/app.py
+`streamlit run app/app.py`
 
 # Aplicación modular en Streamlit para preprocesamiento, PCA, clustering y exportación de resultados
 Este repositorio contiene una plataforma interactiva diseñada para realizar análisis quimiométrico de forma intuitiva y reproducible.
@@ -75,4 +83,27 @@ Descarga de:
 
 Métricas
 * Generación dinámica de archivos .csv y .json
+
+# Estructura del repositorio:
+Herramienta-de-analisis-quimetrico/
+
+```
+Herramienta-de-analisis-quimetrico/
+- app/
+    - app.py
+    - pages/
+        - 0_Ayuda_Interpretacion.py
+        - 1_Home.py
+        - 2_Preprocesamiento.py
+        - 3_PCA.py
+        - 4_Clustering.py
+        - 5_Resultados_Exportacion.py
+- scripts/
+    - preprocessing.py
+    - pca_utils.py
+    - clustering_utils.py
+    - io_utils.py
+- requirements.txt
+- README.md
+```
 
