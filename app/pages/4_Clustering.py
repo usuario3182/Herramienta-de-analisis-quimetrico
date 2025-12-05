@@ -173,6 +173,7 @@ def render_cluster_projection_and_summary() -> None:
         color="cluster",
         title=f"Clústeres y centroides en PCA ({pc_x} vs {pc_y})",
         color_discrete_sequence=discrete_colors,
+        height=700
     )
     fig.update_traces(marker=dict(size=7, opacity=0.8))
 
@@ -474,6 +475,7 @@ def render_cluster_plots(sources: Dict[str, pd.DataFrame]) -> None:
                 color="cluster",
                 title=f"Clústeres proyectados en espacio PCA ({pc_x} vs {pc_y})",
                 color_discrete_sequence=discrete_colors,
+                height=700
             )
             fig.update_traces(marker=dict(size=8, opacity=0.85))
             fig.update_layout(legend_title="Clúster")

@@ -218,53 +218,62 @@ def render_scores_plots() -> None:
         title=f"Scores de PCA: {x_pc} vs {y_pc}",
         color_discrete_sequence=discrete_seq,
     )
-    fig.update_layout(template="plotly_dark", height=500)
+    fig.update_layout(template="plotly_dark", height=700)
 
     st.plotly_chart(fig, use_container_width=True)
 
 
 def render_biplot() -> None:
-    """Genera un biplot sencillo con scores y loadings."""
-
-    palette_name = st.session_state.get("plot_color_palette", "deep")
-    discrete_colors = get_discrete_palette(palette_name)
-    
     scores_df = st.session_state.get("pca_scores")
     loadings_df = st.session_state.get("pca_loadings")
+
     if scores_df is None or loadings_df is None:
-        st.info("Calcule el PCA para visualizar el biplot.")
+        st.info(
+            "Para generar el biplot primero necesitas calcular el PCA "
+            "y guardar scores y loadings."
+        )
         return
 
-    pcs = _get_available_pcs()
-    if len(pcs) < 2:
-        st.warning("Se requieren al menos dos componentes para el biplot.")
+    from scripts.io_utils import get_discrete_palette
+    palette_name = st.session_state.get("plot_color_palette", "deep")
+    discrete_colors = get_discrete_palette(palette_name) or px.colors.qualitative.Plotly
+
+    pc_cols = [c for c in scores_df.columns if c.startswith("PC")]
+    if len(pc_cols) < 2:
+        st.warning("Se requieren al menos dos componentes principales para el biplot.")
         return
 
     col1, col2 = st.columns(2)
-    discrete_colors = get_discrete_palette(palette_name)
+    pc_x = col1.selectbox("Componente X (biplot)", pc_cols, index=0)
+    pc_y = col2.selectbox(
+        "Componente Y (biplot)",
+        pc_cols,
+        index=1 if len(pc_cols) > 1 else 0,
+    )
 
-    pc_x = col1.selectbox("Componente X (biplot)", pcs, index=0)
-    pc_y = col2.selectbox("Componente Y (biplot)", pcs, index=1 if len(pcs) > 1 else 0)
-
-    # Scatter de scores usa la paleta completa
+    # Dispersión de scores
     fig = px.scatter(
         scores_df,
         x=pc_x,
         y=pc_y,
         title="Biplot PCA",
         color_discrete_sequence=discrete_colors,
+        height=700
     )
 
-    # Color para vectores
-    vector_color = discrete_colors[0] if discrete_colors else "red"
-
-    # Escalado de vectores
+    # Escalar vectores de loadings para visualización
     loadings_subset = loadings_df[[pc_x, pc_y]]
     max_score = max(scores_df[pc_x].abs().max(), scores_df[pc_y].abs().max())
-    scale = max_score * 0.8 if max_score > 0 else 1
+    scale = max_score * 0.8 if max_score > 0 else 1.0
 
-    # Añadir vectores
-    for var_name, (loading_x, loading_y) in loadings_subset.iterrows():
+    # Añadir flechas de loadings
+    for idx, (var_name, row) in enumerate(loadings_subset.iterrows()):
+        loading_x = row[pc_x]
+        loading_y = row[pc_y]
+
+        # un solo color por variable (se recorre la paleta)
+        arrow_color = discrete_colors[idx % len(discrete_colors)]
+
         fig.add_trace(
             go.Scatter(
                 x=[0, loading_x * scale],
@@ -272,17 +281,14 @@ def render_biplot() -> None:
                 mode="lines+text",
                 text=["", var_name],
                 textposition="top center",
-                line=dict(color=vector_color, width=2),
-                showlegend=False,
+                line=dict(color=arrow_color),
+                showlegend=False, 
             )
         )
 
-    st.plotly_chart(fig, use_container_width=True)
-
     fig.update_layout(xaxis_title=pc_x, yaxis_title=pc_y)
     st.plotly_chart(fig, use_container_width=True)
-
-
+    
 def main() -> None:
     render_header()
 

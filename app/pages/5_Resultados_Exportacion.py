@@ -347,11 +347,12 @@ def render_figures_section() -> None:
                 y="PC2",
                 color=color_arg,
                 title="Scores PC1 vs PC2",
+                height=700
             )
             st.plotly_chart(fig_scores, use_container_width=True)
 
             st.caption(
-                "💡 Para exportar esta figura en PNG o SVG, haga clic en el ícono "
+                "Para exportar esta figura en PNG o SVG, haga clic en el ícono "
                 "de cámara dentro del gráfico. Plotly genera automáticamente la imagen."
             )
 
