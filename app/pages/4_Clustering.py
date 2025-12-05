@@ -80,7 +80,14 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+
+import plotly.figure_factory as ff
+from scipy.cluster.hierarchy import linkage as scipy_linkage, dendrogram as scipy_dendrogram
+import pandas as pd
+
+
 
 from scripts.io_utils import get_discrete_palette
 
@@ -421,7 +428,6 @@ def render_cluster_plots(sources: Dict[str, pd.DataFrame]) -> None:
     - Si la fuente es otra (clean_df, etc.), usa variables numéricas
       seleccionables como ejes X e Y y colorea por clúster.
     """
-
     labels = st.session_state.get("cluster_labels")
     metrics = st.session_state.get("cluster_metrics")
     config = st.session_state.get("cluster_config", {})
@@ -446,66 +452,8 @@ def render_cluster_plots(sources: Dict[str, pd.DataFrame]) -> None:
     labels_series = pd.Series(np.asarray(labels), index=df_source.index, name="cluster")
     df_source["cluster"] = labels_series.astype(str)
 
-    st.subheader("Visualización de clústeres")
-
-    # ------------------------------------------------------------------
-    # Caso 1: fuente = pca_scores → espacio de componentes principales
-    # ------------------------------------------------------------------
-    if source_key == "pca_scores":
-        # Buscar columnas que empiecen con "PC"
-        pc_cols = [c for c in df_source.columns if c.startswith("PC")]
-        if len(pc_cols) < 2:
-            st.warning(
-                "Se requieren al menos dos componentes principales (PCs) para graficar. "
-                "Verifique la configuración de PCA."
-            )
-        else:
-            col1, col2 = st.columns(2)
-            pc_x = col1.selectbox("Componente X (PCA)", pc_cols, index=0)
-            pc_y = col2.selectbox(
-                "Componente Y (PCA)",
-                pc_cols,
-                index=1 if len(pc_cols) > 1 else 0,
-            )
-
-            fig = px.scatter(
-                df_source,
-                x=pc_x,
-                y=pc_y,
-                color="cluster",
-                title=f"Clústeres proyectados en espacio PCA ({pc_x} vs {pc_y})",
-                color_discrete_sequence=discrete_colors,
-                height=700
-            )
-            fig.update_traces(marker=dict(size=8, opacity=0.85))
-            fig.update_layout(legend_title="Clúster")
-            st.plotly_chart(fig, use_container_width=True)
-
-    # ------------------------------------------------------------------
-    # Caso 2: fuente = clean_df (u otra) → espacio de variables originales
-    # ------------------------------------------------------------------
-    else:
-        numeric_cols = df_source.select_dtypes(include="number").columns.tolist()
-        if len(numeric_cols) < 2:
-            st.warning("Se necesitan al menos dos columnas numéricas para graficar.")
-        else:
-            col1, col2 = st.columns(2)
-            x_axis = col1.selectbox("Eje X", options=numeric_cols, index=0)
-            y_default = 1 if len(numeric_cols) > 1 else 0
-            y_axis = col2.selectbox("Eje Y", options=numeric_cols, index=y_default)
-
-            fig = px.scatter(
-                df_source,
-                x=x_axis,
-                y=y_axis,
-                color="cluster",
-                title="Distribución de clústeres en variables originales",
-                color_discrete_sequence=discrete_colors,
-            )
-            fig.update_traces(marker=dict(size=8, opacity=0.85))
-            fig.update_layout(legend_title="Clúster")
-            st.plotly_chart(fig, use_container_width=True)
-
+    
+    
     # ------------------------------------------------------------------
     # Métricas del clustering
     # ------------------------------------------------------------------
@@ -516,6 +464,170 @@ def render_cluster_plots(sources: Dict[str, pd.DataFrame]) -> None:
         for (name, value), col in zip(metric_items, cols):
             display_value = "N/A" if value is None else f"{float(value):.4f}"
             col.metric(name, display_value)
+
+def render_pca_cluster_map():
+    """Mostrar PCA PC1 vs PC2 coloreado por clúster + centroides."""
+
+    pca_scores = st.session_state.get("pca_scores")
+    labels = st.session_state.get("cluster_labels")
+    palette_name = st.session_state.get("plot_color_palette", "deep")
+    discrete_colors = get_discrete_palette(palette_name)
+
+    if pca_scores is None or labels is None:
+        st.info("Se requiere PCA y clustering para mostrar el mapa PCA por clúster.")
+        return
+
+    if not {"PC1", "PC2"}.issubset(pca_scores.columns):
+        st.warning("No existen PC1 y PC2 para graficar el mapa PCA por clúster.")
+        return
+
+    df_plot = pca_scores.copy()
+    df_plot["cluster"] = labels.astype(str)
+
+    # --- Calcular centroides ---
+    centroids = df_plot.groupby("cluster")[["PC1", "PC2"]].mean().reset_index()
+
+    # --- Scatter plot principal ---
+    fig = px.scatter(
+        df_plot,
+        x="PC1",
+        y="PC2",
+        color="cluster",
+        color_discrete_sequence=discrete_colors,
+        title="Mapa PCA de clústeres con centroides",
+        opacity=0.8,
+    )
+
+    # --- Agregar centroides ---
+    fig.add_trace(
+        go.Scatter(
+            x=centroids["PC1"],
+            y=centroids["PC2"],
+            mode="markers+text",
+            marker=dict(size=14, symbol="x", color="white", line=dict(color="black", width=2)),
+            text=[f"C{c}" for c in centroids["cluster"]],
+            textposition="top center",
+            name="Centroides",
+        )
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+
+
+def render_hierarchical_dendrogram(sources: Dict[str, pd.DataFrame]) -> None:
+    """
+    Mostrar un dendrograma jerárquico cuando el algoritmo seleccionado es jerárquico.
+
+    - Usa la misma fuente de datos y columnas que la configuración de clustering.
+    - Usa plotly.figure_factory.create_dendrogram.
+    - Ajusta labels para que sean legibles y muestra claramente la escala de distancias.
+    """
+    
+    config = st.session_state.get("cluster_config", {})
+    if config.get("algorithm") != "hierarchical":
+        return
+
+    source_key = config.get("source")
+    if not source_key or source_key not in sources:
+        st.warning("No se encontró la fuente de datos utilizada para el clustering.")
+        return
+
+    df_source = sources[source_key]
+
+    # Columnas numéricas a usar (las mismas que en el clustering)
+    cols = config.get("columns") or df_source.select_dtypes(include="number").columns.tolist()
+    if not cols:
+        st.warning("No hay columnas numéricas suficientes para construir el dendrograma.")
+        return
+
+    X = df_source[cols].to_numpy()
+
+    linkage_method = config.get("linkage", "ward")
+    affinity = config.get("affinity", "euclidean")
+    if linkage_method == "ward":
+        affinity = "euclidean"
+
+    # ---------- Etiquetas de las hojas ----------
+    # 1) Si existe alguna columna útil como ID / nombre de muestra, úsala.
+    #    Puedes cambiar esta lista según tu dataset.
+    candidate_label_cols = ["Muestra", "Sample", "ID", "Nombre", "name"]
+    label_col = None
+    for c in candidate_label_cols:
+        if c in df_source.columns:
+            label_col = c
+            break
+    # ---------- Etiquetas de las hojas ----------
+    # 1) Si existe alguna columna útil como ID / nombre de muestra, úsala.
+    candidate_label_cols = ["Muestra", "Sample", "ID", "Nombre", "name"]
+    label_col = None
+    for c in candidate_label_cols:
+        if c in df_source.columns:
+            label_col = c
+            break
+
+    if label_col is not None:
+        leaf_labels = df_source[label_col].astype(str).tolist()
+    else:
+        leaf_labels = df_source.index.astype(str).tolist()
+
+    # OPCIONAL: recortar etiquetas para que no se encimen tanto
+    max_label_len = 18
+    leaf_labels = [lab[:max_label_len] for lab in leaf_labels]
+
+    # ---------- Matriz de enlace con SciPy ----------
+    Z = scipy_linkage(X, method=linkage_method, metric=affinity)
+
+    # Estimar un color_threshold aproximado para k clústers
+    n_clusters = config.get("n_clusters", 3)
+    if n_clusters >= 2 and n_clusters <= Z.shape[0] + 1:
+        idx = -(n_clusters - 1)
+        color_threshold = Z[idx, 2] if abs(idx) <= Z.shape[0] else 0.7 * Z[:, 2].max()
+    else:
+        color_threshold = 0.7 * Z[:, 2].max()
+
+    st.subheader("Dendrograma jerárquico")
+
+    # Dendrograma orientado a la izquierda
+    fig = ff.create_dendrogram(
+        X,
+        orientation="left",
+        labels=leaf_labels,
+        linkagefun=lambda _: Z,
+    )
+
+    # ---------- Ajustes visuales de ejes / labels ----------
+    fig.update_layout(
+        # width=None deja que Streamlit use el ancho del contenedor
+        width=None,
+        height=1_000,                     # más alto para que se separen las hojas
+        showlegend=False,
+        xaxis_title="Distancia (nivel de fusión)",
+        margin=dict(l=260, r=40, t=40, b=40),  # más margen a la izquierda para labels
+        template="plotly_white",
+    )
+
+    # Eje X: escala de distancias
+    fig.update_xaxes(
+        showgrid=True,
+        zeroline=False,
+        tickformat=".2f",
+        ticks="outside",
+        showline=True,
+        linewidth=1,
+        mirror=True,
+    )
+
+    # Eje Y: labels de muestras
+    fig.update_yaxes(
+        automargin=True,
+        tickfont=dict(size=8),   # letras más pequeñas
+    )
+
+    # ---------- Mostrar en Streamlit ----------
+    st.plotly_chart(fig, use_container_width=True)
+
 
 
 def main() -> None:
@@ -547,10 +659,12 @@ def main() -> None:
     
     
     render_clustering_config_panel(sources)
-    render_run_clustering_button(sources)
     render_cluster_plots(sources)
+    render_run_clustering_button(sources)
+    #render_pca_cluster_map()
     render_cluster_projection_and_summary()
+    render_hierarchical_dendrogram(sources)
 
-
+    
 if __name__ == "__main__":
     main()

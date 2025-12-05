@@ -98,13 +98,6 @@ def main() -> None:
             label="5. Resultados y exportación",
         )
 
-    st.markdown(
-        """
-        > Consejo: puedes volver a esta pantalla en cualquier momento usando el menú
-        > lateral de Streamlit (página **app.py / Home**).
-        """
-    )
-
 
 if __name__ == "__main__":
     main()

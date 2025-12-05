@@ -9,8 +9,10 @@ scikit-learn>=1.2
 matplotlib>=3.7
 seaborn>=0.12
 plotly>=5.18
+scipy
 # Para usar plotly en Streamlit sin problemas adicionales:
 streamlit-plotly-events>=0.0.6
+
 
 # --- Streamlit for the app ---
 streamlit>=1.28
