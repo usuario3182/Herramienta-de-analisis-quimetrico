@@ -54,7 +54,7 @@ def load_example_dataset(base_path: Optional[Path] = None) -> pd.DataFrame:
     return df
 
 
-def load_uploaded_file(uploaded_file) -> pd.DataFrame:
+def load_uploaded_dataset(uploaded_file) -> pd.DataFrame:
     """Load a user-provided file in CSV or Excel format.
 
     Parameters
@@ -91,3 +91,42 @@ def load_uploaded_file(uploaded_file) -> pd.DataFrame:
         raise ValueError("El archivo cargado no contiene datos.")
 
     return df
+
+
+def describe_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Create a small descriptive summary of the dataframe.
+
+    Parameters
+    ----------
+    df:
+        Dataframe to describe.
+
+    Returns
+    -------
+    pd.DataFrame
+        Summary metrics with human-friendly labels.
+    """
+
+    if df is None:
+        raise ValueError("No se proporcionó un dataframe para describir.")
+
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+    categorical_cols = df.select_dtypes(include=["object", "category"]).columns
+    datetime_cols = df.select_dtypes(include=["datetime", "datetime64[ns]", "datetimetz"]).columns
+
+    summary = {
+        "Filas": len(df),
+        "Columnas": df.shape[1],
+        "Variables numéricas": len(numeric_cols),
+        "Variables categóricas": len(categorical_cols),
+        "Variables fecha": len(datetime_cols),
+        "Valores faltantes": int(df.isna().sum().sum()),
+    }
+
+    return pd.DataFrame(
+        {"Métrica": list(summary.keys()), "Valor": list(summary.values())}
+    )
+
+
+# Backwards compatibility with earlier name
+load_uploaded_file = load_uploaded_dataset
