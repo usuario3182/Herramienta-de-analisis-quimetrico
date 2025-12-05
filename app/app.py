@@ -57,13 +57,12 @@ def _render_pipeline_status() -> None:
 def main() -> None:
     st.set_page_config(
         page_title="Análisis quimiométrico",
-        page_icon="🧪",
         layout="wide",
     )
 
     _init_global_state()
 
-    st.title("🧪 Análisis quimiométrico – Panel principal")
+    st.title("Análisis quimiométrico – Panel principal")
 
     st.markdown(
         """
