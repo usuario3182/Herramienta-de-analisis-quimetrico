@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 import streamlit as st
+import pandas as pd
 
 from scripts.preprocessing import compute_missing_summary, infer_variable_types, preprocess_data
 
