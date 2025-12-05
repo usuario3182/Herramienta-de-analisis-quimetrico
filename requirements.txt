@@ -1,0 +1,28 @@
+# --- Core scientific stack ---
+numpy>=1.23
+pandas>=2.0
+
+# --- Machine Learning / Statistics ---
+scikit-learn>=1.2
+
+# --- Plotting libraries ---
+matplotlib>=3.7
+seaborn>=0.12
+plotly>=5.18
+# Para usar plotly en Streamlit sin problemas adicionales:
+streamlit-plotly-events>=0.0.6
+
+# --- Streamlit for the app ---
+streamlit>=1.28
+
+# --- Excel & file parsing support ---
+openpyxl>=3.1      # Para leer archivos .xlsx
+xlrd>=2.0          # Para .xls antiguos
+pyarrow>=14.0      # Mejora velocidad de pandas y permite formatos modernos
+
+# --- Utils / Typing ---
+python-dateutil>=2.8
+typing-extensions>=4.8
+
+# --- Optional but recommended ---
+scikit-learn-intelex  # Si quisieras acelerar PCA/KMeans (opcional)
