@@ -21,7 +21,7 @@ def render_header() -> None:
     """Encabezado de la página con descripción breve."""
 
     st.set_page_config(page_title="Preprocesamiento", page_icon="⚙️")
-    st.title("⚙️ Preprocesamiento de datos")
+    st.title("Preprocesamiento de datos")
     st.markdown(
         """
         Defina los tipos de variables, configure la imputación de valores faltantes y
@@ -42,7 +42,8 @@ def render_variable_type_table(df: pd.DataFrame) -> None:
     inferred = infer_variable_types(df)
 
     for column in df.columns:
-        example_value = df[column].dropna().iloc[0] if df[column].dropna().any() else ""
+        non_null = df[column].dropna()
+        example_value = non_null.iloc[0] if len(non_null) > 0 else ""
         current_internal = st.session_state["schema"].get(column, inferred.get(column, "numeric"))
         options = list(VISIBLE_TYPE_OPTIONS.keys())
         default_label = next(
@@ -126,7 +127,11 @@ def render_missing_and_imputation_controls(df: pd.DataFrame) -> None:
     if plot_cols[0].button("Ver histograma"):
         if col_type == "numeric":
             fig, ax = plt.subplots()
-            sns.histplot(df[selected_column].dropna(), kde=True, ax=ax)
+            
+            series = df[selected_column].dropna()
+            df_plot = series.to_frame(name=selected_column)
+            
+            sns.histplot(data=df_plot, x=selected_column, kde=True, ax=ax)
             ax.set_title(f"Histograma de {selected_column}")
             st.pyplot(fig)
         else:
@@ -134,8 +139,11 @@ def render_missing_and_imputation_controls(df: pd.DataFrame) -> None:
 
     if plot_cols[1].button("Ver boxplot"):
         if col_type == "numeric":
+            series = df[selected_column].dropna()
+            df_plot = series.to_frame(name=selected_column)
+
             fig, ax = plt.subplots()
-            sns.boxplot(x=df[selected_column].dropna(), ax=ax)
+            sns.boxplot(data=df_plot, x=selected_column, ax=ax)
             ax.set_title(f"Boxplot de {selected_column}")
             st.pyplot(fig)
         else:
