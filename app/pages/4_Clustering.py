@@ -1,6 +1,6 @@
 """
 Página 4: Clustering.
-
+ 
 OBJETIVO DE LA PÁGINA
 ---------------------
 - Aplicar métodos de clustering (K-Means y jerárquico) sobre:

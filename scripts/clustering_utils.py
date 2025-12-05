@@ -43,7 +43,7 @@ import pandas as pd
 from sklearn.cluster import AgglomerativeClustering, KMeans
 from sklearn.metrics import silhouette_score
 
-
+ 
 # === TODO: implementar funciones auxiliares de clustering debajo de esta línea ===
 
 
