@@ -6,10 +6,15 @@ largo del archivo como comentarios.
 """
 
 from __future__ import annotations
-
 from typing import List
-
 import streamlit as st
+
+import os
+import sys
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
 from scripts.io_utils import (
     describe_dataframe,
@@ -55,7 +60,7 @@ def render_header() -> None:
     """Mostrar título y descripción general de la aplicación."""
 
     st.set_page_config(page_title="Inicio - Análisis Quimiométrico", page_icon="🧪")
-    st.title("🧪 Análisis Quimiométrico: Aplicación Interactiva")
+    st.title("Análisis Quimiométrico: Aplicación Interactiva")
     st.markdown(
         """
         Esta aplicación multipágina guía el flujo típico de un análisis
@@ -140,9 +145,9 @@ def render_navigation() -> None:
     )
     navigation_cols = st.columns(2)
     with navigation_cols[0]:
-        st.page_link("pages/2_Preprocesamiento.py.py", label="Ir a Preprocesamiento", icon="⚙️")
+        st.page_link("pages/2_Preprocesamiento.py", label="Ir a Preprocesamiento", icon="⚙️")
     with navigation_cols[1]:
-        st.page_link("pages/0_Ayuda_Interpretacion.py.py", label="Ver ayuda e interpretación", icon="📖")
+        st.page_link("pages/0_Ayuda_Interpretacion.py", label="Ver ayuda e interpretación", icon="📖")
 
 
 def main() -> None:
