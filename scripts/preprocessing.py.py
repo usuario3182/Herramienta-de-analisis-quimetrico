@@ -1,136 +1,155 @@
-"""
-preprocessing.py
+"""Funciones de preprocesamiento para la app de análisis quimiométrico."""
 
-Utility functions for preprocessing the dataset in the chemometrics app.
+from __future__ import annotations
 
-This module is responsible for:
-- Handling variable types (numeric, categorical, date).
-- Converting pandas dtypes according to a user-defined schema.
-- Summarizing missing values.
-- Applying missing-value imputation per column.
-- Scaling (standardizing) numeric variables.
-- Producing a final "clean" DataFrame that will be used in PCA and clustering.
-
-IMPORTANT FOR CODEX:
-- The main consumer of these functions is the Preprocessing page
-  (app/pages/2_Preprocesamiento.py).
-- The user will choose:
-    * The type of each variable: "numeric", "categorical", "date".
-    * An imputation strategy per variable.
-    * Whether each numeric variable should be standardized.
-- The configuration (schema, imputation, scaling) will be stored in
-  st.session_state and passed down to these functions.
-
-Terminology:
-- "schema": dict mapping column names -> logical type
-    e.g. {"Absorbancia_1": "numeric", "Muestra": "categorical", "Fecha": "date"}
-- "imputation_config": dict mapping column names -> strategy info
-    e.g. {
-        "Absorbancia_1": {"strategy": "median"},
-        "Muestra": {"strategy": "mode"},
-        "pH": {"strategy": "constant", "fill_value": 7.0}
-    }
-- "scaling_config": dict mapping numeric column names -> bool
-    e.g. {"Absorbancia_1": True, "Absorbancia_2": True, "Muestra": False}
-
-Required functions (to implement):
-
-1) infer_variable_types(df: pd.DataFrame) -> dict
-   - Optionally infer default variable types from pandas dtypes.
-   - This can be a simple heuristic:
-       * numeric dtypes -> "numeric"
-       * datetime-like -> "date"
-       * everything else -> "categorical"
-
-2) convert_dtypes(df: pd.DataFrame, schema: dict) -> pd.DataFrame
-   - Return a copy of df where each column is converted according to schema.
-   - For "numeric": use pd.to_numeric(errors="raise") if possible.
-   - For "date": use pd.to_datetime(errors="raise").
-   - For "categorical": use df[col].astype("category") when appropriate.
-   - Raise a ValueError with a clear message if conversion for a column fails.
-
-3) compute_missing_summary(df: pd.DataFrame) -> pd.DataFrame
-   - Return a small summary table with:
-       column name, number of missing values, percentage of missing values.
-
-4) apply_imputation(
-       df: pd.DataFrame,
-       imputation_config: dict
-   ) -> pd.DataFrame
-   - For each column in imputation_config, apply the specified strategy.
-   - Supported strategies (at minimum):
-       "drop_rows"   -> drop rows where this column is NaN.
-       "mean"        -> fillna(mean) for numeric columns.
-       "median"      -> fillna(median) for numeric columns.
-       "mode"        -> fillna(mode) for any type.
-       "constant"    -> fillna(fill_value) using the provided value.
-   - Return a new DataFrame after applying all imputations.
-   - If a strategy is not applicable to a column (e.g. mean on non-numeric),
-     raise a ValueError with a clear, column-specific message.
-
-5) apply_scaling(
-       df: pd.DataFrame,
-       scaling_config: dict
-   ) -> pd.DataFrame
-   - For each column with scaling_config[col] == True:
-       * apply standardization: (x - mean) / std.
-       * can use sklearn.preprocessing.StandardScaler or manual implementation.
-   - Only apply scaling to numeric columns.
-   - Return a new DataFrame with scaled values.
-
-6) preprocess_data(
-       df: pd.DataFrame,
-       schema: dict,
-       imputation_config: dict,
-       scaling_config: dict
-   ) -> pd.DataFrame
-   - High-level function used by the Streamlit page:
-       * Convert dtypes according to schema.
-       * Compute and apply imputations.
-       * Apply scaling.
-       * Return the final "clean" DataFrame ready for PCA.
-   - Use try/except internally to raise friendly ValueErrors indicating the
-     column and step where something failed (e.g. conversion vs imputation).
-
-Codex: Please implement these functions clearly and in a modular way. They will
-be called from app/pages/2_Preprocesamiento.py and the errors they raise will
-be shown to the user in the UI (st.error).
-"""
+from typing import Dict, Iterable, Tuple
 
 import pandas as pd
-from typing import Dict, Any
+from pandas.api.types import is_datetime64_any_dtype, is_numeric_dtype
+from sklearn.preprocessing import StandardScaler
 
 
-def infer_variable_types(df: pd.DataFrame) -> Dict[str, str]:
-    """TODO: Infer basic variable types from dtypes."""
-    raise NotImplementedError
+Schema = Dict[str, str]
+ImputationConfig = Dict[str, Dict[str, object]]
+ScalingConfig = Dict[str, bool]
 
 
-def convert_dtypes(df: pd.DataFrame, schema: Dict[str, str]) -> pd.DataFrame:
-    """TODO: Convert columns to the logical types defined in schema."""
-    raise NotImplementedError
+def infer_variable_types(df: pd.DataFrame) -> Schema:
+    """Inferir tipos de variables basados en el dtype de pandas."""
+
+    inferred: Schema = {}
+    for column in df.columns:
+        series = df[column]
+        if is_datetime64_any_dtype(series):
+            inferred[column] = "date"
+        elif is_numeric_dtype(series):
+            inferred[column] = "numeric"
+        else:
+            inferred[column] = "categorical"
+    return inferred
+
+
+def convert_dtypes(df: pd.DataFrame, schema: Schema) -> pd.DataFrame:
+    """Convertir columnas según el esquema proporcionado."""
+
+    converted = df.copy()
+    for column, col_type in schema.items():
+        if column not in converted.columns:
+            raise ValueError(f"La columna '{column}' no existe en los datos.")
+        try:
+            if col_type == "numeric":
+                converted[column] = pd.to_numeric(converted[column], errors="raise")
+            elif col_type == "date":
+                converted[column] = pd.to_datetime(converted[column], errors="raise")
+            elif col_type == "categorical":
+                converted[column] = converted[column].astype("category")
+            else:
+                raise ValueError(f"Tipo no soportado para la columna '{column}': {col_type}")
+        except Exception as exc:  # pragma: no cover - feedback específico
+            raise ValueError(
+                f"Error al convertir la columna '{column}' al tipo {col_type}: {exc}"
+            ) from exc
+    return converted
 
 
 def compute_missing_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """TODO: Return summary of missing values per column."""
-    raise NotImplementedError
+    """Calcular el resumen de valores faltantes por columna."""
+
+    total_rows = len(df)
+    summary_rows: Iterable[Tuple[str, int, float]] = (
+        (col, int(df[col].isna().sum()), float(df[col].isna().mean()) * 100)
+        for col in df.columns
+    )
+    summary_df = pd.DataFrame(summary_rows, columns=["columna", "faltantes", "%"])
+    summary_df["%"] = summary_df["%"].round(2)
+    summary_df["filas_totales"] = total_rows
+    return summary_df
 
 
-def apply_imputation(df: pd.DataFrame, imputation_config: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
-    """TODO: Apply per-column imputation strategies."""
-    raise NotImplementedError
+def apply_imputation(
+    df: pd.DataFrame, imputation_config: ImputationConfig, schema: Schema
+) -> pd.DataFrame:
+    """Aplicar imputación según configuración por columna."""
+
+    imputed = df.copy()
+    for column, config in imputation_config.items():
+        if column not in imputed.columns:
+            raise ValueError(f"La columna '{column}' no existe en los datos.")
+        strategy = config.get("strategy", "none") if config else "none"
+        fill_value = config.get("fill_value") if config else None
+
+        if strategy == "none":
+            continue
+        if strategy == "drop_rows":
+            imputed = imputed[imputed[column].notna()]
+            continue
+
+        col_type = schema.get(column)
+        series = imputed[column]
+
+        if strategy in {"mean", "median"}:
+            if not is_numeric_dtype(series):
+                raise ValueError(
+                    f"La estrategia '{strategy}' solo es válida para datos numéricos en la columna '{column}'."
+                )
+            value = series.mean() if strategy == "mean" else series.median()
+            imputed[column] = series.fillna(value)
+        elif strategy == "mode":
+            mode_series = series.mode(dropna=True)
+            if mode_series.empty:
+                raise ValueError(
+                    f"No se pudo calcular la moda para la columna '{column}' porque no hay valores válidos."
+                )
+            imputed[column] = series.fillna(mode_series.iloc[0])
+        elif strategy == "constant":
+            if fill_value is None:
+                raise ValueError(
+                    f"Debe proporcionar un valor constante para imputar la columna '{column}'."
+                )
+            imputed[column] = series.fillna(fill_value)
+        else:
+            raise ValueError(
+                f"Estrategia de imputación no reconocida para la columna '{column}': {strategy}"
+            )
+    return imputed
 
 
-def apply_scaling(df: pd.DataFrame, scaling_config: Dict[str, bool]) -> pd.DataFrame:
-    """TODO: Apply standardization to selected numeric variables."""
-    raise NotImplementedError
+def apply_scaling(df: pd.DataFrame, scaling_config: ScalingConfig, schema: Schema) -> pd.DataFrame:
+    """Estandarizar columnas numéricas según la configuración."""
+
+    scaled = df.copy()
+    numeric_to_scale = [
+        col for col, flag in scaling_config.items() if flag and schema.get(col) == "numeric"
+    ]
+    if not numeric_to_scale:
+        return scaled
+
+    scaler = StandardScaler()
+    scaled_values = scaler.fit_transform(scaled[numeric_to_scale])
+    scaled[numeric_to_scale] = scaled_values
+    return scaled
 
 
 def preprocess_data(
     df: pd.DataFrame,
-    schema: Dict[str, str],
-    imputation_config: Dict[str, Dict[str, Any]],
-    scaling_config: Dict[str, bool],
+    schema: Schema | None = None,
+    imputation_config: ImputationConfig | None = None,
+    scaling_config: ScalingConfig | None = None,
 ) -> pd.DataFrame:
-    """TODO: High-level pipeline combining conversion, imputation and scaling."""
-    raise NotImplementedError
+    """Ejecutar el pipeline completo de preprocesamiento."""
+
+    if df is None or df.empty:
+        raise ValueError("No hay datos para preprocesar.")
+
+    schema = schema or infer_variable_types(df)
+    inferred_schema = infer_variable_types(df)
+    for column, inferred_type in inferred_schema.items():
+        schema.setdefault(column, inferred_type)
+
+    imputation_config = imputation_config or {}
+    scaling_config = scaling_config or {}
+
+    converted = convert_dtypes(df, schema)
+    imputed = apply_imputation(converted, imputation_config, schema)
+    scaled = apply_scaling(imputed, scaling_config, schema)
+    return scaled
