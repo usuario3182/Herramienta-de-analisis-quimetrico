@@ -44,7 +44,7 @@ def load_example_dataset(base_path: Optional[Path] = None) -> pd.DataFrame:
         raise FileNotFoundError(f"No se encontró el dataset de ejemplo en {data_path}.")
 
     try:
-        df = pd.read_excel("data/ejemplo_quimiometria.xls")
+        df = pd.read_excel(data_path)
     except Exception as exc:  # pragma: no cover - defensive for unexpected read errors
         raise ValueError(f"No se pudo leer el dataset de ejemplo: {exc}") from exc
 

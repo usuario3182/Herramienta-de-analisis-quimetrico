@@ -1,80 +1,79 @@
-"""
-pca_utils.py
-
-Funciones auxiliares para realizar PCA dentro de la aplicación de análisis
-quimiométrico.
-
-RESPONSABILIDAD DEL MÓDULO:
----------------------------
-Este módulo NO maneja Streamlit ni la interfaz. Solo:
-- Prepara los datos para PCA (selección de columnas numéricas).
-- Ejecuta PCA usando scikit-learn.
-- Devuelve:
-    * El modelo PCA ajustado.
-    * Los scores (coordenadas de las muestras en el espacio de componentes).
-    * Los loadings (contribución de cada variable original a cada componente).
-    * Una tabla con varianza explicada y varianza acumulada.
-
-SE USA PRINCIPALMENTE EN:
--------------------------
-- app/pages/3_PCA.py
-
-CONVENCIONES:
--------------
-- Input principal: DataFrame limpio (clean_df) desde st.session_state.
-- Solo se usan columnas numéricas para PCA.
-- Los nombres de componentes serán "PC1", "PC2", ..., "PCk".
-
-Funciones a implementar:
-
-1) select_numeric_columns(df: pd.DataFrame, columns: list[str] | None) -> pd.DataFrame
-   - Si columns es None o vacío: seleccionar todas las columnas numéricas de df.
-   - Si columns se especifica: tomar solo esas columnas (y validar que existan).
-   - Levantar ValueError si no hay columnas numéricas.
-
-2) run_pca(
-       df: pd.DataFrame,
-       n_components: int,
-       columns: list[str] | None = None
-   ) -> tuple[PCA, pd.DataFrame, pd.DataFrame, pd.DataFrame]
-   - Seleccionar columnas numéricas (usando select_numeric_columns).
-   - Ajustar sklearn.decomposition.PCA con n_components.
-   - Devolver:
-        model: objeto PCA entrenado.
-        scores_df: DataFrame (muestras x componentes) con columnas "PC1", ...
-        loadings_df: DataFrame (variables x componentes) con columnas "PC1", ...
-        explained_df: DataFrame con columnas:
-            "Componente", "Varianza", "Proporción_varianza", "Varianza_acumulada"
-
-3) build_explained_variance_table(model: PCA) -> pd.DataFrame
-   - A partir del modelo PCA, crear la tabla de varianza explicada y acumulada.
-   - Esta función puede usarse de forma independiente si es necesario.
-
-Codex: Implementa estas funciones de forma clara y robusta. Serán usadas por
-la página 3 (PCA) para mostrar tablas y gráficos interactivos.
-"""
-
+"""Utilidades para cálculo y visualización de PCA en la app de quimiometría."""
 from __future__ import annotations
-
-from typing import List, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 from sklearn.decomposition import PCA
 
-def select_numeric_columns(df: pd.DataFrame, columns: List[str] | None = None) -> pd.DataFrame:
-    """TODO: Seleccionar columnas numéricas y validar entrada."""
-    raise NotImplementedError
+
+def select_numeric_columns(df: pd.DataFrame, columns: Optional[Sequence[str]] = None) -> pd.DataFrame:
+    """Selecciona únicamente columnas numéricas.
+
+    Si ``columns`` es None o una lista vacía, se devuelven todas las columnas
+    numéricas del DataFrame. Si se proporciona una lista, primero se valida que
+    las columnas existan y luego se filtran para conservar solo las numéricas.
+
+    Raises:
+        ValueError: si faltan columnas solicitadas o no quedan columnas
+        numéricas tras el filtrado.
+    """
+
+    if columns:
+        missing = [col for col in columns if col not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Las columnas solicitadas no existen en los datos: {', '.join(missing)}"
+            )
+        candidate_df = df[list(columns)]
+    else:
+        candidate_df = df.select_dtypes(include=["number"]).copy()
+
+    numeric_cols: List[str] = [
+        col for col in candidate_df.columns if is_numeric_dtype(candidate_df[col])
+    ]
+    if not numeric_cols:
+        raise ValueError("No hay columnas numéricas para aplicar PCA.")
+
+    return candidate_df[numeric_cols]
 
 
 def build_explained_variance_table(model: PCA) -> pd.DataFrame:
-    """TODO: Construir tabla con varianza explicada y acumulada por componente."""
-    raise NotImplementedError
+    """Construye una tabla con métricas de varianza explicada del PCA."""
+
+    components = [f"PC{i}" for i in range(1, len(model.explained_variance_) + 1)]
+    df = pd.DataFrame(
+        {
+            "Componente": components,
+            "Varianza": model.explained_variance_,
+            "Proporción_varianza": model.explained_variance_ratio_,
+        }
+    )
+    df["Varianza_acumulada"] = df["Proporción_varianza"].cumsum()
+    df["Proporción_varianza"] = df["Proporción_varianza"].round(4)
+    df["Varianza_acumulada"] = df["Varianza_acumulada"].round(4)
+    return df
 
 
 def run_pca(
-    df: pd.DataFrame,
-    n_components: int,
-    columns: List[str] | None = None,
+    df: pd.DataFrame, n_components: int, columns: Optional[Sequence[str]] = None
 ) -> Tuple[PCA, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """TODO: Ejecutar PCA y devolver modelo, scores, loadings y tabla de varianza."""
-    raise NotImplementedError
+    """Ejecuta el PCA y devuelve modelo, scores, loadings y varianza."""
+
+    X = select_numeric_columns(df, columns)
+    if n_components is None:
+        raise ValueError("Debe especificar el número de componentes.")
+    if n_components < 1 or n_components > X.shape[1]:
+        raise ValueError(
+            f"El número de componentes debe estar entre 1 y {X.shape[1]}, se recibió {n_components}."
+        )
+
+    model = PCA(n_components=n_components, random_state=0)
+    scores = model.fit_transform(X)
+
+    component_names = [f"PC{i}" for i in range(1, n_components + 1)]
+    scores_df = pd.DataFrame(scores, index=df.index, columns=component_names)
+    loadings_df = pd.DataFrame(model.components_.T, index=X.columns, columns=component_names)
+    explained_df = build_explained_variance_table(model)
+
+    return model, scores_df, loadings_df, explained_df
