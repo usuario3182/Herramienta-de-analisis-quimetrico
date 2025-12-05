@@ -14,7 +14,7 @@ from scripts.pca_utils import run_pca
 def render_header() -> None:
     """Encabezado explicativo de la página."""
 
-    st.title("📊 Análisis de Componentes Principales")
+    st.title("Análisis de Componentes Principales")
     st.markdown(
         """
         El PCA reduce la dimensionalidad agrupando la variabilidad en un número
@@ -42,10 +42,12 @@ def render_pca_config_panel(df):
         default=default_columns,
     )
 
-    effective_columns = selected_columns or numeric_columns
-    max_components = min(len(effective_columns), 10)
-    current_n = previous_config.get("n_components", max_components)
-    n_components = st.slider(
+    max_components = min(len(selected_columns) if selected_columns else n_vars, 10)
+    if max_components < 1:
+        max_components = min(n_vars, 10)
+
+    current_n = st.session_state.get("pca_config", {}).get("n_components", max_components)
+    n_components = st.number_input(
         "Número de componentes",
         min_value=1,
         max_value=max_components,
@@ -54,7 +56,7 @@ def render_pca_config_panel(df):
     )
 
     st.session_state["pca_config"] = {
-        "columns": effective_columns,
+        "columns": selected_columns if selected_columns else numeric_columns,
         "n_components": int(n_components),
     }
 
@@ -133,7 +135,8 @@ def render_scores_plots() -> None:
 
     color_options = ["Sin color"]
     if clean_df is not None:
-        color_options.extend(list(clean_df.columns))
+        categorical_cols = list(clean_df.select_dtypes(exclude="number").columns)
+        color_options.extend(categorical_cols)
 
     color_by = st.selectbox("Color por variable", options=color_options)
     color_arg = None if color_by == "Sin color" else color_by
@@ -169,9 +172,10 @@ def render_biplot() -> None:
 
     fig = px.scatter(scores_df, x=pc_x, y=pc_y, title="Biplot PCA")
 
+    # Escalar vectores de loadings para visualización
     loadings_subset = loadings_df[[pc_x, pc_y]]
     max_score = max(scores_df[pc_x].abs().max(), scores_df[pc_y].abs().max())
-    scale = max_score * 0.6 if max_score > 0 else 1
+    scale = max_score * 0.8 if max_score > 0 else 1
 
     for var_name, (loading_x, loading_y) in loadings_subset.iterrows():
         fig.add_trace(

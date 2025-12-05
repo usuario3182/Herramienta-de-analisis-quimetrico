@@ -22,9 +22,7 @@ def select_numeric_columns(df: pd.DataFrame, columns: Optional[Sequence[str]] = 
     if columns:
         missing = [col for col in columns if col not in df.columns]
         if missing:
-            raise ValueError(
-                f"Las columnas solicitadas no existen en los datos: {', '.join(missing)}"
-            )
+            raise ValueError(f"Las columnas solicitadas no existen en los datos: {', '.join(missing)}")
         candidate_df = df[list(columns)]
     else:
         candidate_df = df.select_dtypes(include=["number"]).copy()
@@ -39,7 +37,7 @@ def select_numeric_columns(df: pd.DataFrame, columns: Optional[Sequence[str]] = 
 
 
 def build_explained_variance_table(model: PCA) -> pd.DataFrame:
-    """Construye una tabla con métricas de varianza explicada del PCA."""
+    """Construye una tabla con la varianza explicada del modelo PCA."""
 
     components = [f"PC{i}" for i in range(1, len(model.explained_variance_) + 1)]
     df = pd.DataFrame(
